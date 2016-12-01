@@ -50,6 +50,11 @@ main(int argc, char *argv[]) {
 	struct termios t;
 	int rstate;
 
+	if (argc != 2) {
+		fprintf(stderr, "%s socket\n", argv[0]);
+		return (1);
+	}
+
 	if (tcgetattr(fileno(stdin), &t) == -1)
 		err(1, "tcgetattr");
 	memcpy(&oldterm, &t, sizeof(t));
@@ -111,7 +116,7 @@ main(int argc, char *argv[]) {
 		}
 		if (fds[0].revents & POLLIN) {
 			char buf[128], *p;
-			size_t r, tx;
+			size_t r;
 
 			r = read(fds[0].fd, buf, sizeof(buf));
 			if (r == -1)
