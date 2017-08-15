@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Jason L. Wright (jason@thought.net)
+ * Copyright (c) 2015, 2017 Jason L. Wright (jason@thought.net)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,10 +34,12 @@
 #include <stdlib.h>
 #include <poll.h>
 #include <unistd.h>
+#include <sysexits.h>
 
 static struct termios oldterm;
 
 void restore_term(void);
+void usage(const char *);
 
 #define RSTATE_BEGIN	0
 #define	RSTATE_CR	1
@@ -49,21 +51,35 @@ main(int argc, char *argv[]) {
 	int sdi, sdo, fdi, fdo;
 	struct termios t;
 	int rstate;
+	FILE *logfile = NULL;
+
+	while ((rstate = getopt(argc, argv, "l:")) != -1) {
+		switch (rstate) {
+		case 'l':
+			logfile = fopen(optarg, "ab");
+			if (logfile == NULL)
+				err(EX_CANTCREAT, "open(%s)", optarg);
+			break;
+		default:
+			usage(argv[0]);
+			return (EX_USAGE);
+		}
+	}
 
 	if (argc != 2) {
-		fprintf(stderr, "%s socket\n", argv[0]);
-		return (1);
+		usage(argv[0]);
+		return (EX_USAGE);
 	}
 
 	if (tcgetattr(fileno(stdin), &t) == -1)
-		err(1, "tcgetattr");
+		err(EX_IOERR, "tcgetattr");
 	memcpy(&oldterm, &t, sizeof(t));
 
 	cfmakeraw(&t);
 	if (tcsetattr(fileno(stdin), TCSANOW | TCSASOFT, &t) == -1)
-		err(1, "tcsetattr");
+		err(EX_IOERR, "tcsetattr");
 	atexit(restore_term);
-	
+
 	memset(&sun, 0, sizeof(sun));
 	sun.sun_len = strlen(argv[1]) + 1;
 	sun.sun_family = AF_UNIX;
@@ -71,14 +87,14 @@ main(int argc, char *argv[]) {
 
 	sdi = socket(AF_UNIX, SOCK_STREAM, PF_UNSPEC);
 	if (sdi == -1)
-		err(1, "socket");
-	
+		err(EX_OSERR, "socket");
+
 	if (connect(sdi, (struct sockaddr *)&sun, sizeof(sun)) == -1)
-		err(1, "connect");
+		err(EX_IOERR, "connect");
 
 	sdo = dup(sdi);
 	if (sdo == -1)
-		err(1, "dup");
+		err(EX_OSERR, "dup");
 
 	fdi = fileno(stdin);
 	fdo = fileno(stdout);
@@ -88,11 +104,11 @@ main(int argc, char *argv[]) {
 	for (;;) {
 		struct pollfd fds[4];
 		int i;
-		
+
 		fds[0].fd = fdi;
 		fds[0].events = POLLIN;
 		fds[0].revents = 0;
-	
+
 		fds[1].fd = fdo;
 		fds[1].events = 0;
 		fds[1].revents = 0;
@@ -100,14 +116,14 @@ main(int argc, char *argv[]) {
 		fds[2].fd = sdi;
 		fds[2].events = POLLIN;
 		fds[2].revents = 0;
-		
+
 		fds[3].fd = sdo;
 		fds[3].events = 0;
 		fds[3].revents = 0;
 
 		i = poll(fds, sizeof(fds)/sizeof(fds[0]), -1);
 		if (i == -1)
-			err(1, "poll");
+			err(EX_OSERR, "poll");
 
 		/* read: stdin */
 		if (fds[0].revents & POLLHUP) {
@@ -120,7 +136,7 @@ main(int argc, char *argv[]) {
 
 			r = read(fds[0].fd, buf, sizeof(buf));
 			if (r == -1)
-				err(1, "read(stdin)");
+				err(EX_IOERR, "read(stdin)");
 			if (r == 0)
 				break;
 
@@ -162,21 +178,30 @@ main(int argc, char *argv[]) {
 
 			r = read(fds[2].fd, buf, sizeof(buf));
 			if (r == -1)
-				err(1, "read(stdin)");
+				err(EX_IOERR, "read(stdin)");
 			if (r == 0)
 				goto done;
+
+			if (logfile)
+				fwrite(buf, r, 1, logfile);
+
 			tx = write(fds[1].fd, buf, r);
 			if (tx == -1)
-				err(1, "write(sock)");
+				err(EX_IOERR, "write(sock)");
 		}
 	}
-	      
+
 
 done:
-	return (0);
+	return (EX_OK);
 }
 
 void
 restore_term(void) {
 	tcsetattr(fileno(stdin), TCSANOW | TCSASOFT, &oldterm);
+}
+
+void
+usage(const char *progname) {
+	fprintf(stderr, "%s [-l logfile] socket\n", progname);
 }
