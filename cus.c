@@ -88,8 +88,8 @@ main(int argc, char *argv[]) {
 	sun.sun_family = AF_UNIX;
 #ifndef __linux__
 	sun.sun_len = strlen(argv[1]) + 1;
-	memcpy(&sun.sun_path[0], argv[1], sun.sun_len);
 #endif
+	strcpy(&sun.sun_path[0], argv[1]);
 
 	sdi = socket(AF_UNIX, SOCK_STREAM, PF_UNSPEC);
 	if (sdi == -1)
