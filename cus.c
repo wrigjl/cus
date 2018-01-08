@@ -75,15 +75,21 @@ main(int argc, char *argv[]) {
 		err(EX_IOERR, "tcgetattr");
 	memcpy(&oldterm, &t, sizeof(t));
 
+#ifndef TCSASOFT
+#define TCSASOFT 0
+#endif
+
 	cfmakeraw(&t);
 	if (tcsetattr(fileno(stdin), TCSANOW | TCSASOFT, &t) == -1)
 		err(EX_IOERR, "tcsetattr");
 	atexit(restore_term);
 
 	memset(&sun, 0, sizeof(sun));
-	sun.sun_len = strlen(argv[1]) + 1;
 	sun.sun_family = AF_UNIX;
+#ifndef __linux__
+	sun.sun_len = strlen(argv[1]) + 1;
 	memcpy(&sun.sun_path[0], argv[1], sun.sun_len);
+#endif
 
 	sdi = socket(AF_UNIX, SOCK_STREAM, PF_UNSPEC);
 	if (sdi == -1)
@@ -141,12 +147,15 @@ main(int argc, char *argv[]) {
 				break;
 
 			for (p = buf; r > 0; r--, p++) {
+				ssize_t rr;
+
+				(void)rr;
 				if (rstate == RSTATE_BEGIN) {
 					if (p[0] == '\r') {
 						rstate = RSTATE_CR;
 					} else
 						rstate = RSTATE_BEGIN;
-					write(fds[3].fd, p, 1);
+					rr = write(fds[3].fd, p, 1);
 				} else if (rstate == RSTATE_CR) {
 					if (p[0] == '~') {
 						rstate = RSTATE_TILDE;
@@ -156,13 +165,13 @@ main(int argc, char *argv[]) {
 						else
 							rstate = RSTATE_BEGIN;
 					}
-					write(fds[3].fd, p, 1);
+					rr = write(fds[3].fd, p, 1);
 				} else if (rstate == RSTATE_TILDE) {
 					/* other '~' commands? */
 					if (p[0] == '.')
 						goto done;
 					rstate = RSTATE_BEGIN;
-					write(fds[3].fd, p, 1);
+					rr = write(fds[3].fd, p, 1);
 				}
 			}
 		}
