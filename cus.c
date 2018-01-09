@@ -52,11 +52,14 @@ main(int argc, char *argv[]) {
 	struct termios t;
 	int rstate;
 	FILE *logfile = NULL;
+	char *logfilename = NULL;
+	char *sunpath = argv[1];
 
 	while ((rstate = getopt(argc, argv, "l:")) != -1) {
 		switch (rstate) {
 		case 'l':
-			logfile = fopen(optarg, "ab");
+			logfilename = optarg;
+			logfile = fopen(logfilename, "ab");
 			if (logfile == NULL)
 				err(EX_CANTCREAT, "open(%s)", optarg);
 			break;
@@ -66,7 +69,7 @@ main(int argc, char *argv[]) {
 		}
 	}
 
-	if (argc != 2) {
+	if (argc < 2) {
 		usage(argv[0]);
 		return (EX_USAGE);
 	}
@@ -87,9 +90,9 @@ main(int argc, char *argv[]) {
 	memset(&sun, 0, sizeof(sun));
 	sun.sun_family = AF_UNIX;
 #ifndef __linux__
-	sun.sun_len = strlen(argv[1]) + 1;
+	sun.sun_len = strlen(sunpath) + 1;
 #endif
-	strcpy(&sun.sun_path[0], argv[1]);
+	strcpy(&sun.sun_path[0], sunpath);
 
 	sdi = socket(AF_UNIX, SOCK_STREAM, PF_UNSPEC);
 	if (sdi == -1)
@@ -212,5 +215,5 @@ restore_term(void) {
 
 void
 usage(const char *progname) {
-	fprintf(stderr, "%s [-l logfile] socket\n", progname);
+	fprintf(stderr, "%s socket [-l logfile]\n", progname);
 }
