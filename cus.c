@@ -36,6 +36,10 @@
 #include <unistd.h>
 #include <sysexits.h>
 
+#ifndef TCSASOFT
+#define TCSASOFT 0
+#endif
+
 static struct termios oldterm;
 
 void restore_term(void);
@@ -53,7 +57,8 @@ main(int argc, char *argv[]) {
 	int rstate;
 	FILE *logfile = NULL;
 	char *logfilename = NULL;
-	char *sunpath = argv[1];
+	char *sunpath = NULL;
+	const char *progname = argv[0];
 
 	while ((rstate = getopt(argc, argv, "l:")) != -1) {
 		switch (rstate) {
@@ -69,18 +74,18 @@ main(int argc, char *argv[]) {
 		}
 	}
 
-	if (argc < 2) {
-		usage(argv[0]);
+	argv += optind;
+	argc -= optind;
+
+	if (argc != 1) {
+		usage(progname);
 		return (EX_USAGE);
 	}
-
+	sunpath = argv[0];
+ 
 	if (tcgetattr(fileno(stdin), &t) == -1)
 		err(EX_IOERR, "tcgetattr");
 	memcpy(&oldterm, &t, sizeof(t));
-
-#ifndef TCSASOFT
-#define TCSASOFT 0
-#endif
 
 	cfmakeraw(&t);
 	if (tcsetattr(fileno(stdin), TCSANOW | TCSASOFT, &t) == -1)
@@ -92,7 +97,9 @@ main(int argc, char *argv[]) {
 #ifndef __linux__
 	sun.sun_len = strlen(sunpath) + 1;
 #endif
-	strcpy(&sun.sun_path[0], sunpath);
+	if (strlen(sunpath) > sizeof(sun.sun_path))
+		errx(EX_DATAERR, "%s: name too long", sunpath);
+	strncpy(&sun.sun_path[0], sunpath, sizeof(sun.sun_path));
 
 	sdi = socket(AF_UNIX, SOCK_STREAM, PF_UNSPEC);
 	if (sdi == -1)
