@@ -159,13 +159,11 @@ main(int argc, char *argv[]) {
 			for (p = buf; r > 0; r--, p++) {
 				ssize_t rr;
 
-				(void)rr;
 				if (rstate == RSTATE_BEGIN) {
 					if (p[0] == '\r') {
 						rstate = RSTATE_CR;
 					} else
 						rstate = RSTATE_BEGIN;
-					rr = write(fds[3].fd, p, 1);
 				} else if (rstate == RSTATE_CR) {
 					if (p[0] == '~') {
 						rstate = RSTATE_TILDE;
@@ -175,14 +173,15 @@ main(int argc, char *argv[]) {
 						else
 							rstate = RSTATE_BEGIN;
 					}
-					rr = write(fds[3].fd, p, 1);
 				} else if (rstate == RSTATE_TILDE) {
 					/* other '~' commands? */
 					if (p[0] == '.')
 						goto done;
 					rstate = RSTATE_BEGIN;
-					rr = write(fds[3].fd, p, 1);
 				}
+				rr = write(fds[3].fd, p, 1);
+				if (rr == -1)
+					err(1, "write");
 			}
 		}
 
